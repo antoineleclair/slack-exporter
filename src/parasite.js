@@ -15,6 +15,21 @@ class Parasite {
   }
 
   onMessage(msg) {
+    switch (msg.type) {
+    case 'SEND_INIT_DATA':
+      this.sendInitData();
+      break;
+    }
+  }
+
+  sendInitData() {
+    this.port.postMessage({
+      type: 'INIT_DATA',
+      data: {
+        ims: TS.model.ims,
+        user: TS.model.user
+      }
+    });
   }
 }
 
