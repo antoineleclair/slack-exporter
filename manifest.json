@@ -4,19 +4,24 @@
   "description": "Export your chat history on Slack",
   "version": "1.0",
   "browser_action": {
-    "default_popup": "src/popup.html"
+    "default_popup": "src/popup/popup.html"
   },
   "background": {
     "scripts": [
+      "vendor/dropbox.js",
       "src/background.js"
     ]
   },
   "permissions": [
     "https://*.slack.com/*",
-    "webNavigation"
+    "webNavigation",
+    "storage",
+    "unlimitedStorage"
   ],
   "web_accessible_resources": [
-    "src/parasite.js"
+    "src/parasite.js",
+    "src/dropbox/oauth-receiver.html",
+    "src/dropbox/receiver.js"
   ],
   "externally_connectable": {
     "matches": ["https://*.slack.com/*"]

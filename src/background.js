@@ -1,3 +1,18 @@
+var dropboxClient = new Dropbox.Client({
+  key: 'lhy2vrl1tsbpefo'
+});
+
+dropboxClient.authDriver(new Dropbox.AuthDriver.ChromeExtension({
+  receiverPath: 'src/dropbox/oauth-receiver.html'
+}));
+
+dropboxClient.authenticate((error, data) => {
+  if (error) {
+    console.log('Error authenticating', error);
+    return;
+  }
+});
+
 chrome.runtime.onConnectExternal.addListener(function(port) {
   console.log('New connection for team', port.name);
   port.onMessage.addListener(function(msg) {
