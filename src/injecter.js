@@ -1,5 +1,7 @@
-var body = document.getElementsByTagName('body')[0];
-var script = document.createElement('script');
+let body = document.getElementsByTagName('body')[0];
+let script = document.createElement('script');
 script.setAttribute('type', 'text/javascript');
-script.setAttribute('src', chrome.extension.getURL('/src/parasite.js'));
+let src = chrome.extension.getURL('src/parasite.js') + '?extension_id='
+  + chrome.runtime.id;
+script.setAttribute('src', src);
 body.appendChild(script);
