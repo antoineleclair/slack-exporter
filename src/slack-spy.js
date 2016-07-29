@@ -1,6 +1,6 @@
 (function(win) {
 
-class Parasite {
+class SlackSpy {
   constructor(opts) {
     this.TS = opts.TS;
     this.extensionId = opts.extensionId;
@@ -34,15 +34,25 @@ class Parasite {
 }
 
 let Util = {
-  initParasite: win => {
+  initSlackSpy: win => {
     let interval = setInterval(() => {
-      if (win.TS !== undefined) {
-        clearInterval(interval);
-        new Parasite({
-          TS: win.TS,
-          extensionId: Util.getExtensionIdFromUrl()
-        });
+      if (win.TS === undefined) {
+        return;
       }
+      if (win.TS.model === undefined) {
+        return;
+      }
+      if (win.TS.model.user === undefined) {
+        return;
+      }
+      if (win.TS.model.ims === undefined) {
+        return;
+      }
+      clearInterval(interval);
+      new SlackSpy({
+        TS: win.TS,
+        extensionId: Util.getExtensionIdFromUrl()
+      });
     }, 1000);
   },
   getExtensionIdFromUrl: () => {
@@ -56,6 +66,6 @@ let Util = {
   })()
 }
 
-Util.initParasite(win);
+Util.initSlackSpy(win);
 
 })(window);

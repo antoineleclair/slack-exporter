@@ -6,15 +6,15 @@ class SlackExporter {
     this.dropboxWrapper = new DropboxWrapper({
       appKey: opts.dropboxAppKey
     });
-    this.registerInjecter();
-    this.listenForParasites();
+    this.registerInjector();
+    this.listenForSpies();
   }
 
 
-  registerInjecter() {
+  registerInjector() {
     chrome.webNavigation.onCompleted.addListener(function(details) {
       chrome.tabs.executeScript(details.tabId, {
-        file: 'src/injecter.js'
+        file: 'src/injector.js'
       });
     }, {
       url: [{
@@ -23,7 +23,7 @@ class SlackExporter {
     });
   }
 
-  listenForParasites() {
+  listenForSpies() {
     chrome.runtime.onConnectExternal.addListener(port => {
       console.log('New connection for team', port.name);
       port.onMessage.addListener(msg => this.messageReceived(port, msg));
@@ -50,18 +50,60 @@ class SlackExporter {
 
   initDataReceived(teamName, msgData) {
     console.log('Received init data', teamName, msgData);
-    this.queue.enqueue(() => {
-      let username = msgData.user.name;
-      this.dropboxWrapper.ensureAccountDirectoryExists(teamName, username);
+    let username = msgData.user.name;
+    msgData.ims.forEach(im => {
+      this.queue.enqueue(() => {
+        return this.dropboxWrapper.ensureImExists(teamName, username, im);
+      });
     });
   }
 }
 
+
 class Queue {
-  enqueue(func) {
-    func(); // TODO enqueue and execute in sequence
+  constructor() {
+    this._queue = [];
+    this.length = 0;
+    this._shouldDequeue = 0;
   }
+
+  enqueue(func) {
+    this._queue.push(func);
+    this.length++;
+    this.dequeue();
+  }
+
+  dequeue() {
+    if (this._shouldDequeue == this.length) {
+      return;
+    }
+    this._shouldDequeue++;
+    if (this._shouldDequeue == 1) {
+      this._reallyDequeue();
+    }
+  }
+
+  _reallyDequeue() {
+    let dequeued = this._queue.shift();
+    let promise = dequeued();
+    if (promise !== undefined && promise.then !== undefined) {
+      promise.then(() => this._funcCallCompleted(),
+        () => this._funcCallCompleted());
+    } else {
+      this._funcCallCompleted();
+    }
+  }
+
+  _funcCallCompleted() {
+    this._shouldDequeue--;
+    this.length--;
+    if (this._shouldDequeue > 0) {
+      this._reallyDequeue();
+    }
+  }
+
 }
+
 
 class DropboxWrapper {
   constructor(opts) {
@@ -83,23 +125,42 @@ class DropboxWrapper {
     });
   }
 
-  ensureAccountDirectoryExists(teamName, userName) {
-    this._ensureDirectoryExists('/', teamName).then(() => {
-      return this._ensureDirectoryExists('/', teamName + '/' + userName);
+  ensureImExists(teamName, userName, im) {
+    return new Promise((resolve, reject) => {
+      let path = teamName + '/' + userName + '/ims/' + im.name
+        + '.json';
+      this.client.readFile(path, (error, data, meta, rangeInfo) => {
+        if (error) {
+          if (error.status == 404) {
+            this._createIm(teamName, userName, im).then(resolve, reject);
+          } else {
+            reject(); // some othe error
+          }
+        } else {
+          resolve();
+        }
+      });
     });
   }
 
-  _ensureDirectoryExists(path, directory) {
+  _createIm(teamName, userName, im) {
     return new Promise((resolve, reject) => {
-      this.client.readdir('/', (error, entries) => {
+      let path = teamName + '/' + userName + '/ims/' + im.name + '.json';
+      console.log('Creating IM', path);
+      let emptyData = {
+        id: im.id,
+        user: {
+          id: im.user,
+          name: im.name
+        },
+        msgs: []
+      };
+      let str = JSON.stringify(emptyData, null, 2);
+      this.client.writeFile(path, str, (error) => {
         if (error) {
-          console.log('Error reading Dropbox app directory', error);
           reject();
-        }
-        if (entries.some(entry => entry == directory)) {
-          resolve();
         } else {
-          this.client.mkdir(directory, resolve);
+          resolve();
         }
       });
     });

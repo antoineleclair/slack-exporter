@@ -19,7 +19,7 @@
     "unlimitedStorage"
   ],
   "web_accessible_resources": [
-    "src/parasite.js",
+    "src/slack-spy.js",
     "src/dropbox/oauth-receiver.html",
     "src/dropbox/receiver.js"
   ],
