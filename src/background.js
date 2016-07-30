@@ -37,24 +37,40 @@ class SlackExporter {
     console.log('Received message', msg, 'from port', port);
     switch(msg.type) {
     case 'INIT_DATA':
-      this.initDataReceived(port.name, msg.data);
+      this.initDataReceived(port, msg.data);
+      break;
+    case 'IM_MESSAGES':
+      this.receiveImMessages(port, msg.data);
       break;
     }
   }
 
   requestInitData(port) {
     port.postMessage({
-      type: 'SEND_INIT_DATA'
+      type: 'REQUEST_INIT_DATA'
     });
   }
 
-  initDataReceived(teamName, msgData) {
-    console.log('Received init data', teamName, msgData);
-    let username = msgData.user.name;
+  initDataReceived(port, msgData) {
+    console.log('Received init data', port.name, msgData);
     msgData.ims.forEach(im => {
-      this.queue.enqueue(() => {
-        return this.dropboxWrapper.ensureImExists(teamName, username, im);
-      });
+      return this.requestImMessages(port, im);
+    });
+  }
+
+  requestImMessages(port, im) {
+    port.postMessage({
+      type: 'REQUEST_IM_MESSAGES',
+      data: {
+        imId: im.id
+      }
+    })
+  }
+
+  receiveImMessages(port, msgData) {
+    this.queue.enqueue(() => {
+      return this.dropboxWrapper.addImMsgs(port.name, msgData.user, msgData.im,
+        msgData.messages)
     });
   }
 }
@@ -125,17 +141,39 @@ class DropboxWrapper {
     });
   }
 
-  ensureImExists(teamName, userName, im) {
+  addImMsgs(teamName, user, im, messages) {
+    let path = teamName + '/' + user.name + '/ims/' + im.name + '.json';
     return new Promise((resolve, reject) => {
-      let path = teamName + '/' + userName + '/ims/' + im.name
-        + '.json';
       this.client.readFile(path, (error, data, meta, rangeInfo) => {
         if (error) {
           if (error.status == 404) {
-            this._createIm(teamName, userName, im).then(resolve, reject);
+            data = {
+              id: im.id,
+              users: [{
+                id: im.user,
+                name: im.name
+              }, {
+                id: user.id,
+                name: user.name
+              }],
+              msgs: []
+            };
           } else {
             reject(); // some othe error
+            return;
           }
+        } else {
+          data = JSON.parse(data);
+        }
+        let changed = this.mergeIms(data, im, messages);
+        if (changed) {
+          this.client.writeFile(path, this.stringify(data), (error) => {
+            if (error) {
+              reject();
+            } else {
+              resolve();
+            }
+          });
         } else {
           resolve();
         }
@@ -143,27 +181,30 @@ class DropboxWrapper {
     });
   }
 
-  _createIm(teamName, userName, im) {
-    return new Promise((resolve, reject) => {
-      let path = teamName + '/' + userName + '/ims/' + im.name + '.json';
-      console.log('Creating IM', path);
-      let emptyData = {
-        id: im.id,
-        user: {
-          id: im.user,
-          name: im.name
-        },
-        msgs: []
-      };
-      let str = JSON.stringify(emptyData, null, 2);
-      this.client.writeFile(path, str, (error) => {
-        if (error) {
-          reject();
-        } else {
-          resolve();
-        }
-      });
+  mergeIms(data, im, messages) {
+    let changed = false;
+    messages.forEach(message => {
+      var existing = data.msgs.filter(msg => this._isSameMsg(msg, message));
+      if (existing.length == 0) {
+        data.msgs.push(message);
+        changed = true;
+      }
     });
+    data.msgs.sort((a, b) => a.ts - b.ts);
+    return changed;
+  }
+
+  _isSameMsg(msgA, msgB) {
+    return [
+      'text',
+      'ts',
+      'type',
+      'user'
+    ].every(prop => msgA[prop] == msgB[prop]);
+  }
+
+  stringify(data) {
+    return JSON.stringify(data, null, 2);
   }
 
 }
