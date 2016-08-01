@@ -70,7 +70,8 @@ class SlackExporter {
   receiveImMessages(port, msgData) {
     this.queue.enqueue(() => {
       return this.dropboxWrapper.addImMsgs(port.name, msgData.user, msgData.im,
-        msgData.messages)
+        msgData.messages, msgData.hasMore, msgData.requestedRange.oldest,
+        msgData.requestedRange.latest);
     });
   }
 }
@@ -141,23 +142,13 @@ class DropboxWrapper {
     });
   }
 
-  addImMsgs(teamName, user, im, messages) {
+  addImMsgs(teamName, user, im, messages, hasMore, oldest, latest) {
     let path = teamName + '/' + user.name + '/ims/' + im.name + '.json';
     return new Promise((resolve, reject) => {
       this.client.readFile(path, (error, data, meta, rangeInfo) => {
         if (error) {
           if (error.status == 404) {
-            data = {
-              id: im.id,
-              users: [{
-                id: im.user,
-                name: im.name
-              }, {
-                id: user.id,
-                name: user.name
-              }],
-              msgs: []
-            };
+            data = this._defaultIm(im);
           } else {
             reject(); // some othe error
             return;
@@ -166,6 +157,12 @@ class DropboxWrapper {
           data = JSON.parse(data);
         }
         let changed = this.mergeIms(data, im, messages);
+        if (!hasMore && oldest === undefined) {
+          if (!data.gotOldest) {
+            changed = true;
+          }
+          data.gotOldest = true;
+        }
         if (changed) {
           this.client.writeFile(path, this.stringify(data), (error) => {
             if (error) {
@@ -179,6 +176,21 @@ class DropboxWrapper {
         }
       });
     });
+  }
+
+  _defaultIm(im) {
+    return {
+      id: im.id,
+      users: [{
+        id: im.user,
+        name: im.name
+      }, {
+        id: user.id,
+        name: user.name
+      }],
+      gotOldest: false,
+      msgs: []
+    }
   }
 
   mergeIms(data, im, messages) {

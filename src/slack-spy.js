@@ -2,6 +2,7 @@
 
 class SlackSpy {
   constructor(opts) {
+    console.log('Slack Exporter: Initializing');
     this.TS = opts.TS;
     this.extensionId = opts.extensionId;
     this.queue = new ThrottledQueue();
@@ -9,6 +10,7 @@ class SlackSpy {
   }
 
   initPort() {
+    console.log('Slack Exporter: Opening communication port with extension');
     this.port = chrome.runtime.connect(this.extensionId, {
       name: this.TS.model.team.domain
     });
@@ -16,17 +18,22 @@ class SlackSpy {
   }
 
   onMessage(msg) {
+    console.log('Slack Exporter: Received message from extension', msg);
     switch (msg.type) {
     case 'REQUEST_INIT_DATA':
-      this.sendInitData();
+      this.queue.enqueue(() => this.sendInitData());
       break;
     case 'REQUEST_IM_MESSAGES':
-      this.queue.enqueue(() => this.sendImMessages(msg.data.imId));
+      this.queue.enqueue(() => {
+        return this.sendImMessages(msg.data.imId, msg.data.oldest,
+          msg.data.latest);
+      });
       break;
     }
   }
 
   sendInitData() {
+    console.log('Slack Exporter: Sending initial data to extension');
     this.port.postMessage({
       type: 'INIT_DATA',
       data: {
@@ -36,26 +43,51 @@ class SlackSpy {
     });
   }
 
-  sendImMessages(imId) {
+  sendImMessages(imId, oldest, latest) {
+    console.log('Slack Exporter: Fetching im messages', imId, oldest, latest);
     let im = this.TS.ims.getImById(imId);
-    this.TS.ims.fetchHistory(im, {
+    var args = {
       channel: imId,
-      count: 100,
+      count: 1000,
       inclusive: true
-    }, (success, result) => {
+    };
+    if (oldest) {
+      args.oldest = oldest;
+    }
+    if (latest) {
+      args.latest = latest;
+    }
+    this.TS.ims.fetchHistory(im, args, (success, result) => {
       if (!success) {
-        console.log('Not success fetching IM history', arguments);
+        console.log('Slack Exporter: Failed fetching im history', arguments);
         return;
       }
+      let data = {
+        im: im,
+        messages: result.messages,
+        hasMore: result.has_more,
+        user: this.TS.model.user,
+        requestedRange: {
+          oldest: oldest,
+          latest: latest
+        }
+      };
+      console.log('Slack Exporter: Sending im messages', data);
       this.port.postMessage({
         type: 'IM_MESSAGES',
-        data: {
-          im: im,
-          messages: result.messages,
-          hasMore: result.has_more,
-          user: this.TS.model.user
-        }
+        data: data
       });
+      if (result.has_more) {
+        let newOldest, newLatest;
+        if (oldest) {
+          // TODO
+        } else {
+          newLatest = result.messages[result.messages.length - 1].ts;
+        }
+        this.queue.enqueue(() => {
+          return this.sendImMessages(imId, newOldest, newLatest);
+        });
+      }
     });
     im.history_is_being_fetched = false;
   }
