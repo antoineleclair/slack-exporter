@@ -56,8 +56,8 @@ class SlackSpy {
           user: this.TS.model.user
         }
       });
-
     });
+    im.history_is_being_fetched = false;
   }
 }
 
