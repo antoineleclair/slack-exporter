@@ -54,7 +54,41 @@ class SlackExporter {
   initDataReceived(port, msgData) {
     console.log('Received init data', port.name, msgData);
     msgData.ims.forEach(im => {
-      return this.requestImMessages(port, im);
+      return this.requestMissingImMessages(port, msgData.user, im);
+    });
+  }
+
+  requestMissingImMessages(port, user, im) {
+    this.dropboxWrapper.getIm(port.name, user, im).then(data => {
+      if (data.msgs.length > 0) {
+        if (!data.gotOldest) {
+          console.log('Requesting older history for im with "' + im.name
+            + '"');
+          port.postMessage({
+            type: 'REQUEST_IM_MESSAGES',
+            data: {
+              imId: im.id,
+              latest: data.msgs[0].ts
+            }
+          });
+        }
+        console.log('Requesting new messages for im with "' + im.name + '"');
+        port.postMessage({
+          type: 'REQUEST_IM_MESSAGES',
+          data: {
+            imId: im.id,
+            oldest: data.msgs[data.msgs.length - 1].ts
+          }
+        });
+      } else {
+        console.log('Requesting all messages for im with "' + im.name + '"');
+        port.postMessage({
+          type: 'REQUEST_IM_MESSAGES',
+          data: {
+            imId: im.id
+          }
+        });
+      }
     });
   }
 
@@ -64,7 +98,7 @@ class SlackExporter {
       data: {
         imId: im.id
       }
-    })
+    });
   }
 
   receiveImMessages(port, msgData) {
@@ -142,13 +176,14 @@ class DropboxWrapper {
     });
   }
 
-  addImMsgs(teamName, user, im, messages, hasMore, oldest, latest) {
-    let path = teamName + '/' + user.name + '/ims/' + im.name + '.json';
+  getIm(teamName, user, im) {
+    let path = this._imPath(teamName, user, im);
     return new Promise((resolve, reject) => {
       this.client.readFile(path, (error, data, meta, rangeInfo) => {
         if (error) {
           if (error.status == 404) {
-            data = this._defaultIm(im);
+            console.log('Got 404 for "' + path + '", returning empty ims');
+            data = this._defaultIm(user, im);
           } else {
             reject(); // some othe error
             return;
@@ -156,6 +191,15 @@ class DropboxWrapper {
         } else {
           data = JSON.parse(data);
         }
+        resolve(data);
+      });
+    });
+  }
+
+  addImMsgs(teamName, user, im, messages, hasMore, oldest, latest) {
+    let path = this._imPath(teamName, user, im);
+    return new Promise((resolve, reject) => {
+      this.getIm(teamName, user, im).then(data => {
         let changed = this.mergeIms(data, im, messages);
         if (!hasMore && oldest === undefined) {
           if (!data.gotOldest) {
@@ -178,7 +222,11 @@ class DropboxWrapper {
     });
   }
 
-  _defaultIm(im) {
+  _imPath(teamName, user, im) {
+    return teamName + '/' + user.name + '/ims/' + im.name + '.json';
+  }
+
+  _defaultIm(user, im) {
     return {
       id: im.id,
       users: [{

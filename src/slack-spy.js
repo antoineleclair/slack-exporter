@@ -49,7 +49,7 @@ class SlackSpy {
     var args = {
       channel: imId,
       count: 1000,
-      inclusive: true
+      inclusive: false
     };
     if (oldest) {
       args.oldest = oldest;
