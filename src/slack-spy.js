@@ -8,7 +8,9 @@ class SlackSpy {
     this.cache = {
       ims: {}
     };
-    this.queue = new ThrottledQueue();
+    this.queue = new Queue({
+      throttle: 3000
+    });
     this.initPort();
     this.pollForChanges();
   }
@@ -186,10 +188,15 @@ let Util = {
   })()
 }
 
-class ThrottledQueue { // TODO reuse code for background.js
-  constructor() {
+class Queue { // TODO reuse code for background.js
+  constructor(opts = {}) {
     this._queue = [];
     this.length = 0;
+    if (opts.throttle) {
+      this.throttle = opts.throttle;
+      this.lastDequeueTs = new Date().getTime() - this.throttle;
+    }
+    console.log('ctor', this.throttle, this.lastDequeueTs);
     this._shouldDequeue = 0;
   }
 
@@ -210,19 +217,25 @@ class ThrottledQueue { // TODO reuse code for background.js
   }
 
   _reallyDequeue() {
-    // TODO if _reallyDequeue happened less than 3 seconds ago
-    //      setTImeout here instead (remove the one in _funcCallCompleted);
-    let dequeued = this._queue.shift();
-    let promise = dequeued();
-    if (promise !== undefined && promise.then !== undefined) {
-      promise.then(() => this._funcCallCompleted(),
+    let msWaitRemaining = this.throttle > 0
+      ? this.lastDequeueTs + this.throttle - new Date().getTime()
+      : 0;
+    console.log('Remaining', msWaitRemaining);
+    msWaitRemaining = Math.max(0, msWaitRemaining);
+    setTimeout(() => {
+      let dequeued = this._queue.shift();
+      let promise = dequeued();
+      if (promise !== undefined && promise.then !== undefined) {
+        promise.then(() => this._funcCallCompleted(),
         () => this._funcCallCompleted());
-    } else {
-      this._funcCallCompleted();
-    }
+      } else {
+        this._funcCallCompleted();
+      }
+    }, msWaitRemaining);
   }
 
   _funcCallCompleted() {
+    this.lastDequeueTs = new Date().getTime();
     this._shouldDequeue--;
     this.length--;
     if (this._shouldDequeue > 0) {
