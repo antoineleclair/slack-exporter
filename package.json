@@ -1,0 +1,36 @@
+{
+  "name": "slack-exporter",
+  "version": "0.2.0",
+  "description": "Export your chat history on Slack",
+  "main": "gulpfile.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antoineleclair/slack-exporter.git"
+  },
+  "author": "Antoine Leclair",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/antoineleclair/slack-exporter/issues"
+  },
+  "homepage": "https://github.com/antoineleclair/slack-exporter",
+  "dependencies": {},
+  "devDependencies": {
+    "gulp": "^3.9.1",
+    "gulp-batch": "^1.0.5",
+    "gulp-jspm": "^0.5.13",
+    "gulp-rename": "^1.2.2",
+    "gulp-watch": "^4.3.9",
+    "gulp-zip": "^3.2.0"
+  },
+  "jspm": {
+    "dependencies": {},
+    "devDependencies": {
+      "babel": "npm:babel-core@^5.8.24",
+      "babel-runtime": "npm:babel-runtime@^5.8.24",
+      "core-js": "npm:core-js@^1.1.4"
+    }
+  }
+}
