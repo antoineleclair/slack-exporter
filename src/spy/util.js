@@ -19,6 +19,9 @@ export function initSlackSpy(win) {
     if (win.TS.model.ims === undefined) {
       return;
     }
+    if (win.TS.model.mpims === undefined) {
+      return;
+    }
     clearInterval(interval);
     new SlackSpy({
       TS: win.TS,

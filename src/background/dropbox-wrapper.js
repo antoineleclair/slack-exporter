@@ -16,6 +16,7 @@ class DropboxWrapper {
         console.log('Error authenticating Dropbox client', error);
         return;
       }
+      console.log('Dropbox is authenticated');
     });
   }
 
@@ -33,6 +34,10 @@ class DropboxWrapper {
           }
         } else {
           data = JSON.parse(data);
+          if (data.users) { // migration
+            data.members = data.users;
+            delete data.users;
+          }
         }
         resolve(data);
       });
@@ -72,7 +77,7 @@ class DropboxWrapper {
   _defaultIm(user, im) {
     return {
       id: im.id,
-      users: [{
+      members: [{
         id: im.user,
         name: im.name
       }, {
@@ -95,6 +100,83 @@ class DropboxWrapper {
     });
     data.msgs.sort((a, b) => a.ts - b.ts);
     return changed;
+  }
+
+  getMpim(teamName, user, mpim, members) {
+    let path = this._mpimPath(teamName, user, mpim);
+    return new Promise((resolve, reject) => {
+      this.client.readFile(path, (error, data, meta, rangeInfo) => {
+        if (error) {
+          if (error.status == 404) {
+            console.log('Got 404 for "' + path + '", returning empty mpims');
+            data = this._defaultMpim(user, mpim, members);
+          } else {
+            reject(); // some othe error
+            return;
+          }
+        } else {
+          data = JSON.parse(data);
+        }
+        resolve(data);
+      });
+    });
+  }
+
+  addMpimMsgs(teamName, user, mpim, members, messages, hasMore, oldest,
+      latest) {
+    let path = this._mpimPath(teamName, user, mpim);
+    return new Promise((resolve, reject) => {
+      this.getMpim(teamName, user, mpim, members).then(data => {
+        let changed = this.mergeMpims(data, mpim, messages);
+        if (!hasMore && oldest === undefined) {
+          if (!data.gotOldest) {
+            changed = true;
+          }
+          data.gotOldest = true;
+        }
+        if (changed) {
+          this.client.writeFile(path, this.stringify(data), (error) => {
+            if (error) {
+              reject();
+            } else {
+              resolve();
+            }
+          });
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  mergeMpims(data, im, messages) {
+    let changed = false;
+    messages.forEach(message => {
+      var existing = data.msgs.filter(msg => this._isSameMsg(msg, message));
+      if (existing.length == 0) {
+        data.msgs.push(message);
+        changed = true;
+      }
+    });
+    data.msgs.sort((a, b) => a.ts - b.ts);
+    return changed;
+  }
+
+  _mpimPath(teamName, user, mpim) {
+    return teamName + '/' + user.name + '/mpims/' + mpim.id + '.json';
+  }
+
+  _defaultMpim(user, mpim, members) {
+    if (members === undefined) {
+      // when getting the file without having the data yet
+      members = [];
+    }
+    return {
+      id: mpim.id,
+      members: members.map(m => ({id: m.id, name: m.name})),
+      gotOldest: false,
+      msgs: []
+    }
   }
 
   _isSameMsg(msgA, msgB) {

@@ -4,6 +4,7 @@ import DropboxWrapper from './dropbox-wrapper';
 class SlackExporter {
 
   constructor(opts) {
+    console.log('Initializing SlackExporter');
     this.opts = opts;
     this.queue = new Queue();
     this.dropboxWrapper = new DropboxWrapper({
@@ -44,6 +45,9 @@ class SlackExporter {
     case 'IM_MESSAGES':
       this.receiveImMessages(port, msg.data);
       break;
+    case 'MPIM_MESSAGES':
+      this.receiveMpimMessages(port, msg.data);
+      break;
     }
   }
 
@@ -57,6 +61,9 @@ class SlackExporter {
     console.log('Received init data', port.name, msgData);
     msgData.ims.forEach(im => {
       return this.requestMissingImMessages(port, msgData.user, im);
+    });
+    msgData.mpims.forEach(mpim => {
+      return this.requestMissingMpimMessages(port, msgData.user, mpim);
     });
   }
 
@@ -94,20 +101,52 @@ class SlackExporter {
     });
   }
 
-  requestImMessages(port, im) {
-    port.postMessage({
-      type: 'REQUEST_IM_MESSAGES',
-      data: {
-        imId: im.id
-      }
-    });
-  }
-
   receiveImMessages(port, msgData) {
     this.queue.enqueue(() => {
       return this.dropboxWrapper.addImMsgs(port.name, msgData.user, msgData.im,
         msgData.messages, msgData.hasMore, msgData.requestedRange.oldest,
         msgData.requestedRange.latest);
+    });
+  }
+
+  requestMissingMpimMessages(port, user, mpim) {
+    this.dropboxWrapper.getMpim(port.name, user, mpim).then(data => {
+      if (data.msgs.length > 0) {
+        if (!data.gotOldest) {
+          console.log('Requesting older history for mpim "' + mpim.id + '"');
+          port.postMessage({
+            type: 'REQUEST_MPIM_MESSAGES',
+            data: {
+              mpimId: mpim.id,
+              latest: data.msgs[0].ts
+            }
+          });
+        }
+        console.log('Requesting new messages for mpim "' + mpim.id + '"');
+        port.postMessage({
+          type: 'REQUEST_MPIM_MESSAGES',
+          data: {
+            mpimId: mpim.id,
+            oldest: data.msgs[data.msgs.length - 1].ts
+          }
+        });
+      } else {
+        console.log('Requesting all messages for mpim "' + mpim.id + '"');
+        port.postMessage({
+          type: 'REQUEST_MPIM_MESSAGES',
+          data: {
+            mpimId: mpim.id
+          }
+        });
+      }
+    });
+  }
+
+  receiveMpimMessages(port, msgData) {
+    this.queue.enqueue(() => {
+      return this.dropboxWrapper.addMpimMsgs(port.name, msgData.user,
+        msgData.mpim, msgData.members, msgData.messages, msgData.hasMore,
+        msgData.requestedRange.oldest, msgData.requestedRange.latest);
     });
   }
 }

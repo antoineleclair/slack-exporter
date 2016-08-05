@@ -19,7 +19,7 @@ gulp.task('watch', () => {
 });
 
 gulp.task('zip', ['default'], () => {
-  return gulp.src('build/*')
+  return gulp.src('build/**/*')
     .pipe(zip('slack-exporter.zip'))
     .pipe(gulp.dest('dist'));
 });
@@ -56,7 +56,7 @@ gulp.task('copy', [
 ]);
 
 gulp.task('copy:vendor', () => {
-  return gulp.src('vendor/*')
+  return gulp.src('vendor/**/*')
     .pipe(gulp.dest('build/vendor'));
 });
 
@@ -73,12 +73,12 @@ gulp.task('copy:injector', function () {
 
 gulp.task('copy:dropbox-oauth-receiver', function () {
   return gulp
-    .src('src/dropbox/*')
+    .src('src/dropbox/**/*')
     .pipe(gulp.dest('build/dropbox'));
 });
 
 gulp.task('copy:popup', function () {
   return gulp
-    .src('src/popup/*')
+    .src('src/popup/**/*')
     .pipe(gulp.dest('build/popup'));
 });
