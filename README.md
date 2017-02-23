@@ -13,6 +13,11 @@ This Chrome extension exports your Slack history to your Dropbox folder.
 Even though it works, it's still a prototype. Feel free to help.
 
 ## Development
+Dependencies:
+It's necessary to install jspm first:
+
+    npm install jspm -g
+    jspm install
 
 Build:
 
